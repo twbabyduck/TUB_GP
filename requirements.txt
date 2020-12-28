@@ -1,0 +1,6 @@
+matplotlib
+scikit-learn
+numpy
+# GPFlow Modules
+gpflow
+tensorflow
