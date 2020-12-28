@@ -5,7 +5,10 @@ with supervisor. This repository is just a playground and it is not an official 
 to present our work.
 
 ## Google Colab Instruction Guide
-https://colab.research.google.com/
+https://colab.research.google.com/drive/1E_eogUtk7lv5C3Wy12R4Cp253SHQ72CG?
+
+You might need to make a copy to your Google Drive in order to modify or execute 
+the jupyter notebook
 
 ### Step 1: Allow access to your Google Drive
 ```
