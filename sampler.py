@@ -18,6 +18,10 @@ plt.rc('text.latex', preamble=r'''
        \usepackage{amsmath,amsfonts}
        \renewcommand{\v}[1]{\boldsymbol{#1}}''')
 
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import (RBF, Matern, RationalQuadratic,
+                                              ExpSineSquared, DotProduct,
+                                              ConstantKernel)
 
 class Gauss_Process_Sampler():
 
@@ -193,11 +197,69 @@ class Decoupled_Sampler(Gauss_Process_Sampler):
 
 
 class Thompson_Sampler(Gauss_Process_Sampler):
-    def __init__(self, x, y, test_point_indices):
-        super().__init__(x, y, test_point_indices)
-
-    def fit(self):
-        pass
+    # gdmarmerola
+    def __init__(self, n_random_samples, objective, x_bounds, interval_resolution=1000):
+                
+        # the number of random samples before starting the optimization
+        self.n_random_samples = n_random_samples
+        
+        # the objective function is what we are trying to optimize
+        self.objective = objective
+        
+        # the bounds specify the interval of x we can work
+        self.bounds = x_bounds
+        
+        # interval resolution 
+        # defined how many points to represent the posterior sample
+        self.interval_resolution = interval_resolution
+        self.X_grid = np.linspace(self.bounds[0], self.bounds[1], self.interval_resolution)
+        
+        # initialize design matrix
+        self.X = np.array([])
+        # initialize target variable
+        self.y = np.array([])
+        
+    def fit(self, x, y):
+        # specify Matern Kernel
+        K = 1.0 * Matern(length_scale=1.0, length_scale_bounds=(1e-1, 10.0), nu=1.5)
+        gp = GaussianProcessRegressor(kernel=K)
+        return gp.fit(x,y)
+    
+    # process of choosing next point
+    def choose_next_sample(self):
+        
+        # if we do not have enough samples, sample randomly from bounds
+        if self.X.shape[0] < self.n_random_samples:
+            next_sample = np.random.uniform(self.bounds[0], self.bounds[1],1)[0]
+        
+        # if we do, we fit the GP and choose the next point based on the posterior draw minimum
+        else:
+            # 1. Fit the GP to the observations we have
+            self.gp = self.fit(self.X.reshape(-1,1), self.y)
+            
+            # 2. Draw one sample (a function) from the posterior
+            posterior_sample = self.gp.sample_y(self.X_grid.reshape(-1,1), 1).T[0]
+            
+            # 3. Choose next point as the optimum of the sample
+            which_min = np.argmin(posterior_sample)
+            next_sample = self.X_grid[which_min]
+        
+            # let us also get the std from the posterior, for visualization purposes
+            posterior_mean, posterior_std = self.gp.predict(self.X_grid.reshape(-1,1), return_std=True)
+        
+        # let us observe the objective and append this new data to our X and y
+        next_observation = self.objective(next_sample)
+        self.X = np.append(self.X, next_sample)
+        self.y = np.append(self.y, next_observation)
+        
+        # return everything if possible
+        try:
+            # returning values of interest
+            return self.X, self.y, self.X_grid, posterior_sample, posterior_mean, posterior_std
+        
+        except:
+            return (self.X, self.y, self.X_grid, np.array([np.mean(self.y)]*self.interval_resolution), 
+                    np.array([np.mean(self.y)]*self.interval_resolution), np.array([0]*self.interval_resolution))
 
 class Low_Level_Weight_Space_Sampler(Gauss_Process_Sampler):
     def __init__(self, x, y, test_point_indices):

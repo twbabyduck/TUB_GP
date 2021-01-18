@@ -43,6 +43,12 @@ python3 -m pip install -r requirements.txt
 <img src="pics/minimize.png" width="600">
 <img src="pics/sampling.png" width="600">
 
+
+# Experiment 4 - Thompson Sampling
+
+- TODO: parse parameters as arguments
+```python3 experiment_4.py```
+
 ## GPFlow Sampling Module (Reference)
 ```
 @inproceedings{wilson2020efficiently,
