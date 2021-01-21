@@ -1,5 +1,6 @@
 import utils
 import numpy as np
+import time
 
 import numpy as np
 import tensorflow as tf
@@ -46,38 +47,58 @@ class Gauss_Process_Sampler():
     def reset(self):
         pass
 
-    def plot(self, Xnew, xmins, fmins, fnew,mu,sigma2,lower,upper):
+
+    def simple_plot(self, Xnew, fnew):
+        for iteration in np.arange(fnew.shape[0]):
+            print("scatter one func")
+            print(iteration)
+            plt.plot(Xnew,fnew[iteration]) #c=np.zeros(Xnew.shape[0])+iteration
+
+        plt.show()
+
+
+    def plot(self, Xnew, xmins, fmins, fnew, mu, sigma2, lower, upper):
+        """
+
+        :param Xnew:  1024 locations on x axis (lowest value: 0, heightest value: 1)
+        :param xmins: ?
+        :param fmins: ?
+        :param fnew:
+        :param mu:
+        :param sigma2:
+        :param lower:
+        :param upper:
+        :return:
+        """
         fig, ax = plt.subplots(figsize=(7, 3))
 
         # Indicate where the training data is located
         for x in self.train_x:
             ax.axvline(x, linewidth=4, zorder=0, alpha=0.25, color='silver')
 
-
         # Show gold-standard quantiles
         ax.plot(Xnew, mu, '--k', linewidth=1.0, alpha=0.8)
         ax.plot(Xnew, mu + tf.math.ndtri(lower) * tf.sqrt(sigma2), '--k', linewidth=0.75, alpha=0.8)
         ax.plot(Xnew, mu + tf.math.ndtri(upper) * tf.sqrt(sigma2), '--k', linewidth=0.75, alpha=0.8)
 
-
         cmap = plt.get_cmap('tab10')
         colors = cmap(range(self.model.paths.sample_shape[0]))
+
         for i, xmin, fmin, f in zip(count(), xmins, fmins, fnew):
             print("++")
             print(i)
             print("++")
             ax.plot(Xnew, f, zorder=99, color=colors[i], alpha=2 / 3, linewidth=1.0)
-            #ax.scatter(xmin, fmin, zorder=999, color=colors[i], alpha=0.9, linewidth=2 / 3, marker='o', s=16, edgecolor='k')
+            # ax.scatter(xmin, fmin, zorder=999, color=colors[i], alpha=0.9, linewidth=2 / 3, marker='o', s=16, edgecolor='k')
 
 
         _ = ax.set_ylabel(r'$(f \mid \v{y})(\cdot)$')
         _ = ax.set_xlim(0, 1)
         _ = ax.set_xlabel(r'$\v{x} \in \mathbb{R}$')
-        plt.savefig('plots/plot.png')
+        plt.savefig('plots/plot' + str(time.time()) + '.png')
 
     def wasserstein_distance(self):
         return 0.01
-
 
 
 class Dummy_Sampler(Gauss_Process_Sampler):
@@ -95,8 +116,6 @@ class Sample_Path_Sampler(Gauss_Process_Sampler):
     def __init__(self, x, y, test_point_indices):
         super().__init__(x, y, test_point_indices)
         self.setup()
-
-
 
     def setup(self):
         self.kernel = Matern52(lengthscales=0.1)
@@ -156,33 +175,89 @@ class Sample_Path_Sampler(Gauss_Process_Sampler):
             indices_nd = tf.stack(mesh, axis=-1)
             return tf.gather_nd(arr, indices_nd)
 
-
         lower = tf.cast(0.025, floatx())
         upper = tf.cast(0.975, floatx())
 
-
-        Xnew = np.linspace(0, 1, 1024)[:, None] #abstract this ->x_values
-        fnew = tf.squeeze(self.model.predict_f_samples(Xnew)) #abstract this -> array of y_values
-        mu, sigma2 = map(tf.squeeze, self.model.predict_f(Xnew)) #abstract - mean, quantiles
-
+        Xnew = np.linspace(0, 1, 1024)[:, None]  # abstract this ->x_values
+        fnew = tf.squeeze(self.model.predict_f_samples(Xnew))  # abstract this -> array of y_values
+        mu, sigma2 = map(tf.squeeze, self.model.predict_f(Xnew))  # abstract - mean, quantiles
 
         # Plot samples paths and pathwise minimizers
         fcand = self.model.predict_f_samples(self.Xvars, sample_axis=0)
         index = tf.argmin(fcand, axis=1)
         xmins = take_along_axis(self.Xvars, index[..., None], axis=1)
         fmins = take_along_axis(fcand, index[..., None], axis=1)
-        super().plot(Xnew, xmins, fmins,fnew,mu,sigma2,lower,upper)
+        super().plot(Xnew, xmins, fmins, fnew, mu, sigma2, lower, upper)
 
-class Weight_Space_Sampler(Gauss_Process_Sampler):
-    def __init__(self, x, y, test_point_indices):
-        super().__init__(x, y, test_point_indices)
 
 class Function_Space_Sampler(Gauss_Process_Sampler):
+
     def __init__(self, x, y, test_point_indices):
         super().__init__(x, y, test_point_indices)
 
+
+class Weight_Space_Sampler(Gauss_Process_Sampler):
+
+    def __init__(self, x, y, test_point_indices):
+        super().__init__(x, y, test_point_indices)
+        self.L = 10
+        self.number_functions = 4
+
+    def f(self, x, l, weights=None):
+        sum=0
+        for _l in np.arange(l) + 1:
+            if weights is None:
+                weights = np.random.normal(0, 1)
+            _phi = self.phi(x, l)
+            sum+=np.dot(weights[_l-1], _phi)
+        return sum
+
+    def phi(self, x, _l):
+        ri = np.random.uniform(0, np.pi)
+        theta = np.zeros(x.shape[0]) + 1  # todo
+        return np.sqrt((2 / _l)) * np.cos(np.dot(x, theta) + ri)
+
+    def PHI(self, X):
+        data = np.zeros((X.shape[0], self.L), dtype=np.float64)
+        for index_l, _l in enumerate(np.arange(self.L) + 1):
+            for index_x, x in enumerate(X):
+                data[index_x, index_l] = self.phi(x, _l)
+        return data
+
     def fit(self):
-        pass
+
+        _PHI = self.PHI(self.train_x)
+
+        variance = 1  # todo variance to identity - which variance?
+        inverse = np.linalg.inv((np.dot(_PHI.T, _PHI) + (np.identity(self.L) * (variance ** 2))))
+        self.post_w_mean = np.dot(np.dot(inverse, _PHI.T), self.train_y)
+        self.post_w_cov = inverse * (variance ** 2)
+        self.weights = np.random.multivariate_normal( np.squeeze(self.post_w_mean), self.post_w_cov)
+
+    def sample_from_prior(self, nr_observations):
+        self.fnew = np.zeros((self.number_functions, nr_observations))
+        for f_iteration in np.arange(self.number_functions):
+
+            # create data for this function
+            self.Xnew = np.linspace(0, 1, 1024)[:, None]  # abstract this ->x_values
+            y_values = []
+            for x_index, x in enumerate(self.Xnew):
+                self.fnew[f_iteration, x_index] = self.f(x, self.L, self.weights)
+
+    def plot(self):
+
+        super().simple_plot(self.Xnew.reshape(self.Xnew.shape[0]), self.fnew)
+        '''
+        normal plot seems to be to complicated at the moment -> check later
+        xmins = np.array([0,0,0,0])
+        fmins = np.array([0,0,0,0])
+        mu = np.zeros(1024) +  0.074665
+        sigma2 = np.zeros(1024) +  0.07
+        lower = 0.01
+        upper=0.9
+        #super().plot(self.Xnew, xmins, fmins, self.fnew, mu, sigma2, lower, upper)
+        '''
+
 
 class Decoupled_Sampler(Gauss_Process_Sampler):
     def __init__(self, x, y, test_point_indices):
