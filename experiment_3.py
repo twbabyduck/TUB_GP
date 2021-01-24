@@ -13,7 +13,13 @@ for nr_training_locations in outer_loop:
         for l in [1024,4096,16384]:
             x = x[0:inner_train_location]
             y = y[0:inner_train_location]
+            s1.fit()
+            s1.wasser_distance
             #save to total_results
 
 
 plot_everything(total_results)
+
+
+Question: Weight Space Sampling is part of decoupled or not
+

@@ -12,6 +12,6 @@ x,y = utils.generate_data()
 print(x)
 print(y)
 
-dummy_sampler = sampler.Dummy_Gauss_Sampler([1,100,2,2],[1,100,2,2],[1,2,3])
+dummy_sampler = sampler.Dummy_Gauss_Sampler([1, 100, 2, 2], [1, 100, 2, 2], [1, 2, 3])
 
 dummy_sampler.fit()

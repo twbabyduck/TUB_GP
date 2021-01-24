@@ -1,30 +1,28 @@
+#plot infos
+#left: function space <> exact
+#middle function space view <> sparse
+#right: weight space (basis functions)
+
+
+
 #Figure 1 of Paper
 
 import sampler
 import numpy as np
 import utils
 
-x,y = utils.generate_data()
-samplers=utils.generate_samplers(x,y)
+x_test, y_test = utils.generate_data(nr_train_data=1024)
+x_train, y_train = utils.generate_data(nr_train_data = 4)
 
-samplers = samplers[0:1]
+s_left = sampler.Function_Space_Exact(x_train,y_train)
+s_middle = sampler.Function_Space_Sparse_Sampler(x_train,y_train,8)
+s_right = sampler.Weight_Space_Sampler(x_train,y_train,l=2000)
 
-def exp1(nr_observations, inducing_locations, sampler):
-    sampler.fit()
-    sampler.plot()
-    #sampler.reset()
-    return sampler.plot(), sampler.wasserstein_distance()
+samplers=[s_right,s_left,s_middle]
+samplers=[s_left,s_middle]
 
+for sampler in samplers:
+    print(sampler)
+    sampler.sample_from_posterior(x_test,y_test)
 
-for sampler in  samplers:
-    
-    plot,distance = exp1(4, None, sampler)
-    print(distance)
-    plot,distance = exp1(100, None, sampler)
-    print(distance)
-
-    plot,distance = exp1(4, 8, sampler)
-    print(distance)
-    plot, distance = exp1(100, 8, sampler)
-    print(distance)
 
