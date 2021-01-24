@@ -194,13 +194,13 @@ class Function_Space_Sparse_Sampler():
 
         self.variance = 1
         self.lengthscale = 10
-        optimize_inducing = False
+        self.optimize_inducing = False
 
         self.X = np.asarray(X_train).reshape(-1, 1)
         self.y = np.asarray(y_train).reshape(-1, 1)
         self.u = nr_inducing_points
-        self.Z = np.zeros(6)
-        for i in range(6):
+        self.Z = np.zeros(self.u)
+        for i in range(self.u):
             self.Z[i] = np.random.normal(np.mean(X_train), 1)
         self.Z = self.Z.reshape(-1, 1)
         self.kernel = GPy.kern.RBF(input_dim=1, variance=self.variance, lengthscale=self.lengthscale)
@@ -219,9 +219,10 @@ class Function_Space_Sparse_Sampler():
 
 
 
-    def sample_from_posterior(self, X_test, y_test):
+    def sample_from_posterior(self, X_test, Y_test):
 
-        if self.optimize_inducing_locations():
+
+        if self.optimize_inducing:
             self.optimize_inducing_locations()
 
         reshaped_Test = np.asarray(X_test).reshape(-1, 1)
@@ -230,7 +231,7 @@ class Function_Space_Sparse_Sampler():
         simY, simMse = self.m.predict(reshaped_Test)
         x_predictions = np.linspace(1, len(X_test), len(X_test))
         Y_predictions = posteriorTestY.reshape(len(posteriorTestY))
-        plt.plot(x_predictions, X_test, 'rx')
+        plt.plot(x_predictions, Y_test, 'rx')
         plt.plot(x_predictions, Y_predictions, 'b-')
         plt.show()
 
@@ -249,8 +250,8 @@ class Function_Space_Sparse_Sampler():
 class Function_Space_Exact(): #todo: check if this is really Function Space or something else
 
     def __init__(self, X_train, y_train):
-        self.variance = 1
-        self.lengthscale = 10
+        self.variance = 10
+        self.lengthscale = 100
         self.X = np.asarray(X_train).reshape(-1, 1)
 
         self.y = np.asarray(y_train).reshape(-1, 1)
@@ -260,6 +261,8 @@ class Function_Space_Exact(): #todo: check if this is really Function Space or s
         self.kernel = GPy.kern.RBF(input_dim=1, variance=self.variance, lengthscale=self.lengthscale)
         self.m = GPy.models.GPRegression(self.X, self.y, self.kernel)
         # self.update_inverse()
+        print("a")
+        self.sample_from_prior(10)
 
     def optimize_model(self):
         self.m.optimize(messages=True)
@@ -269,21 +272,26 @@ class Function_Space_Exact(): #todo: check if this is really Function Space or s
         reshaped_Test = np.asarray(X_test).reshape(-1, 1)
         posteriorTestY = self.m.posterior_samples_f(reshaped_Test, full_cov=True, size=1)
         simY, simMse = self.m.predict(reshaped_Test)
+
         x_predictions = np.linspace(1, len(X_test), len(X_test))
         Y_predictions = posteriorTestY.reshape(len(posteriorTestY))
-        plt.plot(x_predictions, X_test, 'rx')
-        plt.plot(x_predictions, Y_predictions, 'b-')
+        plt.plot(x_predictions, X_test, 'rx');
+
+        plt.plot(x_predictions, Y_predictions, 'b-');
         plt.show()
+        import pdb; pdb.set_trace()
         # return posteriorTestY
 
     def sample_from_prior(self, nr_samples):
         ready_for_kernel = np.vstack((self.X.flatten(), self.X.flatten())).T
-        K = k.K(ready_for_kernel)
+        K = self.kernel.K(ready_for_kernel)
         x_predictions = np.linspace(1, len(self.X), len(self.X))
         for i in range(nr_samples):
+
             y_sample = np.random.multivariate_normal(mean=np.zeros(self.X.size), cov=K)
             # print(y_sample)
             plt.plot(x_predictions.flatten(), y_sample.flatten())
+        plt.show()
 
 
 
@@ -338,25 +346,35 @@ class Function_Space_Sampler():
             # print(y_sample)
             plt.plot(x_predictions.flatten(), y_sample.flatten())
 
+
 class Weight_Space_Sampler(Gauss_Process_Sampler):
 
     def __init__(self, x, y, l):
-        super().__init__(x, y)
+        import pdb; pdb.set_trace()
+        self.train_x = x
+        self.train_y = y
         self.L = l
-        self.number_functions = 4
+        self.number_functions = 3
+
+        self.min_x = np.min(self.train_x)
+        self.max_x = np.max(self.train_x)
 
     def f(self, x, l, weights=None):
-        sum=0
+        sum = 0
         for _l in np.arange(l) + 1:
+
             if weights is None:
                 weights = np.random.normal(0, 1)
+
             _phi = self.phi(x, l)
-            sum+=np.dot(weights[_l-1], _phi)
+            sum += np.dot(weights[_l - 1], _phi)
         return sum
 
     def phi(self, x, _l):
         ri = np.random.uniform(0, np.pi)
+
         theta = np.zeros(x.shape[0]) + 1  # todo
+
         return np.sqrt((2 / _l)) * np.cos(np.dot(x, theta) + ri)
 
     def PHI(self, X):
@@ -370,20 +388,28 @@ class Weight_Space_Sampler(Gauss_Process_Sampler):
 
         _PHI = self.PHI(self.train_x)
 
-        variance = 1  # todo variance to identity - which variance?
+        variance = 0.001  # todo variance to identity - which variance?
+
         inverse = np.linalg.inv((np.dot(_PHI.T, _PHI) + (np.identity(self.L) * (variance ** 2))))
         self.post_w_mean = np.dot(np.dot(inverse, _PHI.T), self.train_y)
         self.post_w_cov = inverse * (variance ** 2)
-        self.weights = np.random.multivariate_normal( np.squeeze(self.post_w_mean), self.post_w_cov)
+        self.weights = np.random.multivariate_normal(np.squeeze(self.post_w_mean), self.post_w_cov)
 
     def sample_from_posterior(self, X_test, y_test):
-        x_points = 1000
+        x_points = 25
         self.fit()
         self.fnew = np.zeros((self.number_functions, x_points))
+
+        # print(self.weights)
+        # print(self.weights.shape)
+        # plt.scatter(np.arange(self.weights.shape[0]), self.weights)
+        # plt.show()
+
         for f_iteration in np.arange(self.number_functions):
+            print(f_iteration)
 
             # create data for this function
-            self.Xnew = np.linspace(0, 1, x_points)[:, None]  # abstract this ->x_values
+            self.Xnew = np.linspace(self.min_x, self.max_x, x_points)[:, None]  # abstract this ->x_values
             y_values = []
             for x_index, x in enumerate(self.Xnew):
                 self.fnew[f_iteration, x_index] = self.f(x, self.L, self.weights)
@@ -391,16 +417,6 @@ class Weight_Space_Sampler(Gauss_Process_Sampler):
 
     def plot(self):
         super().simple_plot(self.Xnew.reshape(self.Xnew.shape[0]), self.fnew, self.train_x, self.train_y)
-        '''
-        normal plot seems to be to complicated at the moment -> check later
-        xmins = np.array([0,0,0,0])
-        fmins = np.array([0,0,0,0])
-        mu = np.zeros(1024) +  0.074665
-        sigma2 = np.zeros(1024) +  0.07
-        lower = 0.01
-        upper=0.9
-        #super().plot(self.Xnew, xmins, fmins, self.fnew, mu, sigma2, lower, upper)
-        '''
 
 
 class Decoupled_Sampler(Gauss_Process_Sampler):

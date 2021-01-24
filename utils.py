@@ -4,18 +4,58 @@ from gpflow.config import default_float as floatx
 from gpflow.kernels import Matern52
 from gpflow_sampling.models import PathwiseGPR
 from gpflow_sampling.sampling.updates import cg as cg_update
-
+import GPy
 
 import sampler
-
+import pods
 
 def split(x, y):
     return x, y, x, y
 
 
-def generate_data(nr_train_data = 4):
+def generate_data(nr_train_data=4):
+    data = pods.datasets.olympic_marathon_men()
+    return data['X'][0:nr_train_data], data['Y'][0:nr_train_data]
+
+
+def generate_data4(nr_train_data, shuffle):
+    N = 50
+    noise_var = 0.05
+
+    X = np.linspace(0, 10, 50)[:, None]
+    print(X.shape)
+    k = GPy.kern.RBF(1)
+    y = np.random.multivariate_normal(np.zeros(N), k.K(X) + np.eye(N) * np.sqrt(noise_var)).reshape(-1, 1)
+    #if shuffle:
+        #X, y = shuffle(X, y)
+    return X[0:nr_train_data], y[0:nr_train_data]
+
+def generate_data3(nr_train_data=4):
+    import pandas as pd
+    data = pd.read_csv("drinks.csv")
+    data = pd.DataFrame(data)
+
+    x1 = data['beer_servings']
+    x1_train = data['beer_servings'][1:101]
+    x1_test = data['beer_servings'][101:194]
+    x2_train = data['spirit_servings'][1:101]
+    x2_test = data['spirit_servings'][101:194]
+    x3_train = data['wine_servings'][1:101]
+    x3_test = data['wine_servings'][101:194]
+    x4_train = data['total_litres_of_pure_alcohol'][1:101]
+    x4_test = data['total_litres_of_pure_alcohol'][101:194]
+    x_pred_train = np.linspace(1, 100, 100)
+    x_pred_test = np.linspace(1, 92, 92)
+    x1_test = x1_test - np.mean(x1_train)
+    x1_train = x1_train - np.mean(x1_train)
+
+    return x2_train[0:nr_train_data], x1_train[0:nr_train_data], x2_test[0:nr_train_data] , x1_test[0:nr_train_data]
+
+def _generate_data(nr_train_data = 4):
+    return generate_data_2(nr_train_data)
     kernel = Matern52(lengthscales=0.1)
     noise2 = 1e-3  # measurement noise variance
+
 
     xmin = 0.15  # range over which we observe
     xmax = 0.50  # the behavior of a function $f$
@@ -25,6 +65,9 @@ def generate_data(nr_train_data = 4):
     L = tf.linalg.cholesky(tf.linalg.set_diag(K, tf.linalg.diag_part(K) + noise2))
     y = L @ tf.random.normal([len(X), 1], dtype=floatx())
     y -= tf.reduce_mean(y)  # for simplicity, center the data
+
+    import pdb;
+    pdb.set_trace()
 
 
     return X[0:nr_train_data], y[0:nr_train_data] #todo later: shuffle train data
