@@ -13,10 +13,21 @@ def split(x, y):
     return x, y, x, y
 
 
+def generate_fourier_basis_data(nr_data):
+    x=np.linspace(0,10,nr_data)[::-1]
+    y=list(map(lambda _x: np.cos(_x), x))[::-1]
+    #y = np.ones(nr_data)
+    return np.array(list(map(lambda _x: np.array([_x]), x))),y
+
 def generate_data(nr_train_data=4):
     data = pods.datasets.olympic_marathon_men()
     return data['X'][0:nr_train_data], data['Y'][0:nr_train_data]
 
+
+def generate_data5(nr_data):
+    data_x = np.random.uniform(0,1,nr_data)
+    data_y = np.random.normal(0,1,nr_data)
+    return data_x,data_y
 
 def generate_data4(nr_train_data, shuffle):
     N = 50

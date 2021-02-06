@@ -12,6 +12,7 @@ from itertools import count
 from gpflow.kernels import Matern52
 from gpflow.config import default_float as floatx
 from gpflow_sampling.models import PathwiseGPR
+from sklearn.gaussian_process.kernels import Matern
 
 import matplotlib.pyplot as plt
 
@@ -52,9 +53,13 @@ class Gauss_Process_Sampler():
 
     def simple_plot(self, Xnew, fnew, x_train, y_train):
         for iteration in np.arange(fnew.shape[0]):
+            print("+")
             plt.plot(Xnew,fnew[iteration],zorder=1) #c=np.zeros(Xnew.shape[0])+iteration
         plt.scatter(x_train, y_train,color='black',zorder=2)
-        plt.show()
+        plt.plot(x_train, y_train,color='black',zorder=2)
+        import time
+        plt.savefig('plots/plot_posterior_weight_space-' + str(time.time()) + ".png")
+        plt.clf()
 
 
     def plot(self, Xnew, xmins, fmins, fnew, mu, sigma2, lower, upper):
@@ -85,9 +90,7 @@ class Gauss_Process_Sampler():
         colors = cmap(range(self.model.paths.sample_shape[0]))
 
         for i, xmin, fmin, f in zip(count(), xmins, fmins, fnew):
-            print("++")
-            print(i)
-            print("++")
+
             ax.plot(Xnew, f, zorder=99, color=colors[i], alpha=2 / 3, linewidth=1.0)
             # ax.scatter(xmin, fmin, zorder=999, color=colors[i], alpha=0.9, linewidth=2 / 3, marker='o', s=16, edgecolor='k')
 
@@ -261,7 +264,6 @@ class Function_Space_Exact(): #todo: check if this is really Function Space or s
         self.kernel = GPy.kern.RBF(input_dim=1, variance=self.variance, lengthscale=self.lengthscale)
         self.m = GPy.models.GPRegression(self.X, self.y, self.kernel)
         # self.update_inverse()
-        print("a")
         self.sample_from_prior(10)
 
     def optimize_model(self):
@@ -292,7 +294,6 @@ class Function_Space_Exact(): #todo: check if this is really Function Space or s
             # print(y_sample)
             plt.plot(x_predictions.flatten(), y_sample.flatten())
         plt.show()
-
 
 
 
@@ -349,8 +350,21 @@ class Function_Space_Sampler():
 
 class Weight_Space_Sampler(Gauss_Process_Sampler):
 
+    def sample_from_kernel(self,el_generator, n_samples):
+        # 1d data only
+        results = []
+        for _x in el_generator:
+            for _y in el_generator:
+                x = np.array([[_x]])
+                y = np.array([[_y]])
+                kernel_value = Matern(length_scale=1.0, nu=1.5)(x, y)
+                results.append(kernel_value[0][0])
+
+        np.random.shuffle(results)
+        return results[0:n_samples]
+
     def __init__(self, x, y, l):
-        import pdb; pdb.set_trace()
+        self.ri = np.random.uniform(0, np.pi,l+1)
         self.train_x = x
         self.train_y = y
         self.L = l
@@ -359,29 +373,40 @@ class Weight_Space_Sampler(Gauss_Process_Sampler):
         self.min_x = np.min(self.train_x)
         self.max_x = np.max(self.train_x)
 
+        self.kernel_samples = self.sample_from_kernel(np.linspace(self.min_x,self.max_x,100),self.L+1)
+
+
     def f(self, x, l, weights=None):
         sum = 0
+
+        all_phis=[]
+
         for _l in np.arange(l) + 1:
 
-            if weights is None:
-                weights = np.random.normal(0, 1)
+
+            #if weights is None:
+                #weights = np.random.normal(0, 1)
 
             _phi = self.phi(x, l)
+            all_phis.append(_phi)
             sum += np.dot(weights[_l - 1], _phi)
         return sum
 
     def phi(self, x, _l):
-        ri = np.random.uniform(0, np.pi)
-
-        theta = np.zeros(x.shape[0]) + 1  # todo
-
+        ri = self.ri[_l]
+        theta = self.kernel_samples[_l]
         return np.sqrt((2 / _l)) * np.cos(np.dot(x, theta) + ri)
 
     def PHI(self, X):
         data = np.zeros((X.shape[0], self.L), dtype=np.float64)
-        for index_l, _l in enumerate(np.arange(self.L) + 1):
+        for index_l, _l in enumerate(np.arange(self.L)+1 ):
             for index_x, x in enumerate(X):
                 data[index_x, index_l] = self.phi(x, _l)
+
+
+        #for i in np.arange(100):
+            #plt.scatter(np.arange(50), data[:,i]);
+
         return data
 
     def fit(self):
@@ -391,14 +416,22 @@ class Weight_Space_Sampler(Gauss_Process_Sampler):
         variance = 0.001  # todo variance to identity - which variance?
 
         inverse = np.linalg.inv((np.dot(_PHI.T, _PHI) + (np.identity(self.L) * (variance ** 2))))
+
         self.post_w_mean = np.dot(np.dot(inverse, _PHI.T), self.train_y)
         self.post_w_cov = inverse * (variance ** 2)
         self.weights = np.random.multivariate_normal(np.squeeze(self.post_w_mean), self.post_w_cov)
 
+        #plt.scatter(np.arange(len( self.post_w_mean)), self.post_w_mean)
+        import time
+        #plt.savefig('plots/weights' + str(time.time()) + '.png')
+        #plt.clf()
+
     def sample_from_posterior(self, X_test, y_test):
         x_points = 25
-        self.fit()
+
         self.fnew = np.zeros((self.number_functions, x_points))
+
+        self.fit()
 
         # print(self.weights)
         # print(self.weights.shape)
@@ -413,6 +446,8 @@ class Weight_Space_Sampler(Gauss_Process_Sampler):
             y_values = []
             for x_index, x in enumerate(self.Xnew):
                 self.fnew[f_iteration, x_index] = self.f(x, self.L, self.weights)
+
+
         self.plot()
 
     def plot(self):
